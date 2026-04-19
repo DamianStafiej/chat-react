@@ -19,6 +19,9 @@ function App() {
   const [wiadomosci, setWiadomosci] = useState([]);
   const [mojNick, setMojNick] = useState(localStorage.getItem('shoutboxNick') || '');
 
+  // NOWOŚĆ 1: Stan przechowujący nick osoby, która aktualnie pisze
+  const [ktoPisze, setKtoPisze] = useState(null);
+
   // --- ODBIERANIE WIADOMOŚCI (WEBSOCKET) ---
   useEffect(() => {
     // 3. Nasłuchujemy na sygnał z serwera. Kiedy wpadnie, aktualizujemy Stan!
@@ -26,11 +29,29 @@ function App() {
       setWiadomosci(noweWiadomosci);
     });
 
+    // NOWOŚĆ 2: Nasłuchujemy, czy ktoś inny pisze
+    let typingTimer;
+    socket.on('is_typing', (nick) => {
+      setKtoPisze(nick); // Zapisujemy nick
+      
+      // Magia UX: Czekamy 2 sekundy. Jeśli w tym czasie nie przyleci 
+      // nowy sygnał 'is_typing', uznajemy, że osoba przestała pisać.
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => {
+        setKtoPisze(null);
+      }, 2000);
+    });
+
     // 4. Funkcja sprzątająca wyłącza nasłuch przy zamknięciu komponentu
     return () => {
       socket.off('chat_update');
     };
   }, []); // <- Pusta tablica: podłączamy się tylko raz
+
+  // NOWOŚĆ 3: Funkcja, która odpala się, gdy MY piszemy
+  const handleTyping = () => {
+    socket.emit('typing', mojNick);
+  };
 
   // --- WYSYŁANIE (HTTP POST) ---
   const handleDodajWiadomosc = async (nowyTekst) => {
@@ -90,7 +111,16 @@ function App() {
           ))
         )}
       </div>
-      <MessageForm onWyslij={handleDodajWiadomosc} />
+
+     {/* NOWOŚĆ 4: Pokaż napis TYLKO wtedy, gdy zmienna ktoPisze nie jest pusta */}
+      {ktoPisze && (
+        <div style={{ padding: '0 20px', fontSize: '0.85em', color: '#7f8c8d', fontStyle: 'italic', marginBottom: '5px' }}>
+          ✏️ {ktoPisze} pisze wiadomość...
+        </div>
+      )}
+
+      {/* NOWOŚĆ 5: Przekazujemy funkcję handleTyping do formularza */}
+      <MessageForm onWyslij={handleDodajWiadomosc} onTyping={handleTyping} />
     </div>
   );
 }
